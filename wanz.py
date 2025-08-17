@@ -189,6 +189,8 @@ menu_structure = {
             "/fbdl <url>": "",
             "/capcut <url>": "",
             "/scdl <judul>": "",
+            "/ghdl <url>": "GitHub Repo",
+            "/igdl <url>": "Instagram",
         }
     },
     "media": {
@@ -498,6 +500,41 @@ async def cek_user(event):
         else:
             await m.edit(output_message)
 
+    except Exception as e:
+        await m.edit(f"❌ Error: {e}")
+
+@client.on(events.NewMessage(pattern=r'^/igdl (.+)$'))
+async def igdl(event):
+    sender = await event.get_sender()
+    if not mode_public and not await is_authorized(sender): return
+    url = event.pattern_match.group(1)
+    m = await event.reply("Mengunduh dari Instagram...")
+    try:
+        res = requests.get(f"https://api.siputzx.my.id/api/d/igdl?url={quote(url)}", timeout=60).json()
+        if res.get("status") and res.get("data"):
+            media_files = res.get("data", [])
+            if not media_files:
+                await m.edit("❌ Tidak ada media yang ditemukan di URL tersebut.")
+                return
+
+            await m.edit(f"✅ Ditemukan {len(media_files)} media. Mengirim...")
+
+            for i, media in enumerate(media_files):
+                media_url = media.get("url")
+                if media_url:
+                    try:
+                        await client.send_file(
+                            event.chat_id,
+                            file=media_url,
+                            caption=f"Media {i+1}/{len(media_files)}",
+                            reply_to=event.id
+                        )
+                    except Exception as e:
+                        await event.reply(f"❌ Gagal mengirim media {i+1}: {e}")
+
+            await m.delete() # Hapus pesan "Mengirim..."
+        else:
+            await m.edit(f"❌ Gagal mengunduh dari Instagram. Pesan dari API: `{res.get('data', 'Tidak ada data')}`")
     except Exception as e:
         await m.edit(f"❌ Error: {e}")
 
@@ -832,6 +869,48 @@ async def scdl(event):
                 await m.delete()
                 return
         await m.edit("❌ Tidak ditemukan")
+    except Exception as e:
+        await m.edit(f"❌ Error: {e}")
+
+@client.on(events.NewMessage(pattern=r'^/ghdl (.+)$'))
+async def ghdl(event):
+    sender = await event.get_sender()
+    if not mode_public and not await is_authorized(sender): return
+    url = event.pattern_match.group(1)
+    m = await event.reply("Mengunduh repositori GitHub...")
+    try:
+        res = requests.get(f"https://api.siputzx.my.id/api/d/github?url={quote(url)}", timeout=60).json()
+        if res.get("status") and res.get("data") and "download_url" in res.get("data"):
+            download_url = res["data"]["download_url"]
+            repo_name = res["data"].get("repo", "repository")
+
+            # Mendownload file
+            file_response = requests.get(download_url, stream=True, timeout=300) # Timeout 5 menit
+            file_response.raise_for_status()
+
+            # Menyimpan file ke buffer
+            file_buffer = io.BytesIO()
+            total_downloaded = 0
+            for chunk in file_response.iter_content(chunk_size=8192):
+                file_buffer.write(chunk)
+                total_downloaded += len(chunk)
+                # Anda bisa menambahkan progress update di sini jika mau
+
+            file_buffer.seek(0)
+            file_buffer.name = f"{repo_name}.zip"
+
+            await client.send_file(
+                event.chat_id,
+                file=file_buffer,
+                caption=f"✅ Repositori `{repo_name}` berhasil diunduh.",
+                reply_to=event.id,
+                attributes=[DocumentAttributeAudio(duration=0, title=file_buffer.name, performer=None)] # Trik untuk menampilkan nama file
+            )
+            await m.delete()
+        else:
+            await m.edit(f"❌ Gagal mengunduh repositori. Pesan dari API: `{res.get('data', 'Tidak ada data')}`")
+    except requests.exceptions.Timeout:
+        await m.edit("❌ Error: Waktu permintaan habis saat mengunduh file.")
     except Exception as e:
         await m.edit(f"❌ Error: {e}")
 
