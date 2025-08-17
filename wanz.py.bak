@@ -19,10 +19,10 @@ import asyncio
 API_ID = 25054644
 API_HASH = "d9c07f75d488f15cb655049af0fb686a"
 OWNER_ID = 7774371395
-# Dapatkan kunci API Anda dari https://app.edenai.run/admin/account/settings
 EDENAI_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMGQ5YmYzMzAtYzAyNS00NTM4LThlZGYtYzQxMDkxODBjMGU1IiwidHlwZSI6ImFwaV90b2tlbiJ9.PVCaH6yI1vbuAL-bwnSTKadLgirkDDwzYU4JP-F03xw"
-# Dapatkan kunci API Anda dari https://rapidapi.com/privatix-temp-mail-v1/api/privatix-temp-mail-v1
+
 RAPIDAPI_KEY = "YOUR_RAPIDAPI_KEY"
+LEAKOSINT_API_TOKEN = "7774371395:CPK2Ml23"
 SESSION_NAME = "session"
 DATA_FILE = "awan_data.json"
 AFK_COOLDOWN = 600 # Cooldown dalam detik (10 menit)
@@ -162,7 +162,7 @@ f"⚜️ONLY BASE BY MAVERICK⚜️\nMODE: {mode_text}\n\n"
 "/cekgroup - Cek semua grup\n"
 "/broadcast <msg> | <id> - Broadcast pesan\n"
 "╠══════════════ SEARCH ════════════════╣\n"
-"/ttsearch <kata>\n/ytsearch <kata>\n/pinterest <kata>\n/github <username>\n"
+"/ttsearch <kata>\n/ytsearch <kata>\n/pinterest <kata>\n/github <username>\n/botnik <query>\n"
 "╠══════════════ DOWNLOADER ════════════╣\n"
 "/twdl <url>\n/fbdl <url>\n/capcut <url>\n/scdl <judul>\n"
 "╠══════════════ MEDIA ═════════════════╣\n"
@@ -937,6 +937,86 @@ async def github(event):
         await m.edit(text, link_preview=False)
     except Exception as e:
         await m.edit(f"❌ Error: {e}")
+
+
+@client.on(events.NewMessage(pattern=r'^/botnik(?:\s+(.*))?$'))
+async def botnik(event):
+    sender = await event.get_sender()
+    if not mode_public and not await is_authorized(sender): return
+
+    query = event.pattern_match.group(1)
+    if not query:
+        await event.reply("**Perintah /botnik**\n\n"
+                          "Gunakan perintah ini untuk mencari data berdasarkan query.\n"
+                          "**Contoh:** `/botnik example@gmail.com`")
+        return
+
+    if LEAKOSINT_API_TOKEN == "YOUR_LEAKOSINT_API_TOKEN":
+        await event.reply("❗️ `LEAKOSINT_API_TOKEN` belum diatur. Harap edit file `wanz.py` dan atur token Anda.")
+        return
+
+    m = await event.reply(f"🔎 Mencari data untuk `{query}`...")
+
+    try:
+        data = {
+            "token": LEAKOSINT_API_TOKEN,
+            "request": query,
+            "limit": 300,
+            "lang": "en"
+        }
+        url = 'https://leakosintapi.com/'
+        response = await asyncio.to_thread(requests.post, url, json=data, timeout=120)
+        response.raise_for_status()
+        res_json = response.json()
+
+        if "Error code" in res_json:
+            await m.edit(f"❌ API Error: {res_json.get('Error code')}")
+            return
+
+        if not res_json.get("List") or not any(res_json["List"].values()):
+             await m.edit(f"❌ Tidak ada hasil yang ditemukan untuk `{query}`.")
+             return
+
+        report_text = f"**Hasil Pencarian untuk:** `{query}`\n\n"
+
+        results_found = False
+        for db_name, db_data in res_json.get("List", {}).items():
+            if db_name == "No results found" or not db_data.get("Data"):
+                continue
+
+            results_found = True
+            report_text += f"**📂 Database:** `{db_name}`\n"
+            info_leak = db_data.get("InfoLeak", "")
+            if info_leak:
+                report_text += f"**ℹ️ Info:** {info_leak}\n"
+
+            report_text += "\n"
+
+            for item in db_data["Data"]:
+                for key, value in item.items():
+                    report_text += f"  - **{key.replace('_', ' ').title()}:** `{value}`\n"
+                report_text += "---\n"
+
+        if not results_found:
+             await m.edit(f"❌ Tidak ada hasil yang ditemukan untuk `{query}`.")
+             return
+
+        if len(report_text) > 4096:
+            await m.edit("`Hasil terlalu panjang, mengirim sebagai file...`")
+            with io.BytesIO(report_text.encode('utf-8')) as f:
+                f.name = "botnik_results.txt"
+                await client.send_file(event.chat_id, f, caption=f"Hasil pencarian untuk `{query}`.", reply_to=event.id)
+            await m.delete()
+        else:
+            await m.edit(report_text, link_preview=False)
+
+    except requests.exceptions.Timeout:
+        await m.edit("❌ Error: Permintaan ke API timeout.")
+    except requests.exceptions.RequestException as e:
+        await m.edit(f"❌ Error Koneksi: {e}")
+    except Exception as e:
+        await m.edit(f"❌ Terjadi kesalahan tak terduga: {e}")
+
 
 @client.on(events.NewMessage(pattern=r'^/tr ([\w-]+) (.+)'))
 async def translate(event):
