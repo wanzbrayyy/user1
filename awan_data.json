@@ -1,0 +1,12 @@
+{
+  "welcome": {},
+  "anti_link": {},
+  "shortlinks": {},
+  "afk": {
+    "is_afk": false,
+    "message": "",
+    "since": 0
+  },
+  "cloned_users": [],
+  "message_tracker_enabled": true
+}

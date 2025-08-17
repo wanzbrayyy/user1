@@ -1,0 +1,7 @@
+telethon
+psutil
+requests
+Pillow
+pydub
+SpeechRecognition
+tempmail==3.0
