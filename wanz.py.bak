@@ -8,6 +8,7 @@ from telethon.tl.types import (
     UserStatusLastWeek,
     UserStatusLastMonth,
 )
+from telethon.tl.custom import Button
 import time, psutil, requests, io, os, json, random, sys, traceback
 from PIL import Image, ImageDraw, ImageFont
 from urllib.parse import quote
@@ -19,7 +20,7 @@ import asyncio
 API_ID = 25054644
 API_HASH = "d9c07f75d488f15cb655049af0fb686a"
 OWNER_ID = 7774371395
-EDENAI_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMGQ5YmYzMzAtYzAyNS00NTM4LThlZGYtYzQxMDkxODBjMGU1IiwidHlwZSI6ImFwaV90b2tlbiJ9.PVCaH6yI1vbuAL-bwnSTKadLgirkDDwzYU4JP-F03xw"
+GEMINI_API_KEY = "AIzaSyCgdjMVeHrWdu8HVr-Hzj5NfxJGN7mTiXY"
 
 RAPIDAPI_KEY = "YOUR_RAPIDAPI_KEY"
 LEAKOSINT_API_TOKEN = "7774371395:CPK2Ml23"
@@ -37,7 +38,7 @@ user_interaction_state = {}
 
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
-        json.dump({"welcome": {}, "anti_link": {}, "shortlinks": {}, "afk": {"is_afk": False, "message": "", "since": 0}, "cloned_users": [], "message_tracker_enabled": False}, f)
+        json.dump({"welcome": {}, "anti_link": {}, "shortlinks": {}, "afk": {"is_afk": False, "message": "", "since": 0}, "cloned_users": [], "message_tracker_enabled": False, "cloned_bots": []}, f)
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
@@ -138,47 +139,164 @@ async def find_first_message_date(chat_id, user_id, max_messages=20000):
         return None
     return None
 
+# --- Menu Inline ---
+
+# Definisikan struktur menu
+menu_structure = {
+    "utama": {
+        "title": "UTAMA",
+        "commands": {
+            "/ping": "status bot",
+            "/whois <@user/reply>": "info pengguna",
+            "/text <teks>": "buat stiker teks",
+            "/afk [alasan]": "set mode AFK",
+        }
+    },
+    "owner": {
+        "title": "OWNER",
+        "commands": {
+            "/clone <@user/balas>": "clone user",
+            "/unclone <@user/balas>": "hapus clone",
+            "/clonelist": "lihat daftar clone",
+            "/clonebot": "clone bot lain",
+            "/eval <code>": "eksekusi kode",
+            "/osint <user>": "cek info user",
+            "/trackmsg <on/off>": "lacak pesan grup",
+        }
+    },
+    "broadcast": {
+        "title": "BROADCAST",
+        "commands": {
+            "/cekuser": "Cek semua pengguna",
+            "/cekgroup": "Cek semua grup",
+            "/broadcast <msg> | <id>": "Broadcast pesan",
+        }
+    },
+    "search": {
+        "title": "SEARCH",
+        "commands": {
+            "/ttsearch <kata>": "",
+            "/ytsearch <kata>": "",
+            "/pinterest <kata>": "",
+            "/github <username>": "",
+            "/botnik <query>": "",
+        }
+    },
+    "downloader": {
+        "title": "DOWNLOADER",
+        "commands": {
+            "/twdl <url>": "",
+            "/fbdl <url>": "",
+            "/capcut <url>": "",
+            "/scdl <judul>": "",
+            "/ghdl <url>": "GitHub Repo",
+            "/igdl <url>": "Instagram",
+        }
+    },
+    "media": {
+        "title": "MEDIA",
+        "commands": {
+            "/topdf": "(reply foto)",
+            "/resize <WxH>": "(reply foto)",
+            "/audiotext": "(reply voice/file)",
+        }
+    },
+    "group": {
+        "title": "GROUP",
+        "commands": {
+            "/setwelcome <teks>": "",
+            "/anti <on/off>": "",
+            "/group": "",
+            "/kick <@user/reply>": "kick user",
+        }
+    },
+    "fun": {
+        "title": "FUN",
+        "commands": {
+            "/meme": "",
+            "/fancy <teks>": "",
+            "/quotes": "",
+        }
+    },
+    "util": {
+        "title": "UTIL",
+        "commands": {
+            "/cuaca <kota>": "",
+            "/cekip": "",
+            "/crypto <symbol>": "",
+            "/shortlink <url>": "",
+            "/tr <lang> <text>": "",
+            "/ud <term>": "",
+            "/createweb": "",
+            "/tempmail": "",
+        }
+    }
+}
+
+def build_main_menu():
+    buttons = []
+    row = []
+    for key, value in menu_structure.items():
+        row.append(Button.inline(value['title'], data=f"menu_{key}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    return buttons
+
+def build_submenu(category):
+    submenu = menu_structure.get(category)
+    if not submenu:
+        return "Kategori tidak ditemukan.", []
+
+    text = f"**⚜️ Menu {submenu['title']} ⚜️**\n\n"
+    for cmd, desc in submenu['commands'].items():
+        text += f"`{cmd}`"
+        if desc:
+            text += f" - {desc}"
+        text += "\n"
+
+    buttons = [[Button.inline("⬅️ Kembali", data="menu_main")]]
+    return text, buttons
+
 @client.on(events.NewMessage(pattern=r'^/(start|menu)$'))
 async def show_menu(event):
     sender = await event.get_sender()
-    if not mode_public and not await is_authorized(sender): return
+    if not mode_public and not await is_authorized(sender):
+        return
+
     mode_text = "PUBLIC" if mode_public else "SELF"
-    menu = (
-f"⚜️ONLY BASE BY MAVERICK⚜️\nMODE: {mode_text}\n\n"
-"╔═══════════════ UTAMA ═══════════════╗\n"
-"/ping - status bot\n"
-"/whois <@user/reply> - info pengguna\n"
-"/text <teks> - buat stiker teks\n"
-"/afk [alasan] - set mode AFK\n"
-"╠═══════════════ OWNER ═══════════════╣\n"
-"/clone <@user/balas> - clone user\n"
-"/unclone <@user/balas> - hapus clone\n"
-"/clonelist - lihat daftar clone\n"
-"/eval <code> - eksekusi kode python\n"
-"/osint <user> - cek info user\n"
-"/trackmsg <on/off> - lacak pesan grup\n"
-"╠══════════════ BROADCAST ═════════════╣\n"
-"/cekuser - Cek semua pengguna\n"
-"/cekgroup - Cek semua grup\n"
-"/broadcast <msg> | <id> - Broadcast pesan\n"
-"╠══════════════ SEARCH ════════════════╣\n"
-"/ttsearch <kata>\n/ytsearch <kata>\n/pinterest <kata>\n/github <username>\n/botnik <query>\n"
-"╠══════════════ DOWNLOADER ════════════╣\n"
-"/twdl <url>\n/fbdl <url>\n/capcut <url>\n/scdl <judul>\n"
-"╠══════════════ MEDIA ═════════════════╣\n"
-"/topdf (reply foto)\n/resize <WxH> (reply foto)\n/audiotext (reply voice/file)\n"
-"╠══════════════ GROUP ═════════════════╣\n"
-"/setwelcome <teks>\n/anti <on/off>\n/group\n"
-"╠══════════════ FUN ═════════════════╣\n"
-"/meme\n/fancy <teks>\n/quotes\n"
-"╠══════════════ UTIL ══════════════════╣\n"
-"/cuaca <kota>\n/cekip\n/crypto <symbol>\n/shortlink <url>\n/tr <lang> <text>\n/ud <term>\n/createweb\n/tempmail\n"
-"╚════════════════════════════════════╝"
-    )
+    menu_text = f"⚜️ **ONLY BASE BY MAVERICK** ⚜️\nMODE: `{mode_text}`\n\nPilih kategori di bawah ini:"
+    buttons = build_main_menu()
+
     if await is_owner(sender) or event.outgoing:
-        await event.edit(menu)
+        await event.edit(menu_text, buttons=buttons)
     else:
-        await event.reply(menu)
+        await event.reply(menu_text, buttons=buttons)
+
+@client.on(events.CallbackQuery)
+async def menu_callback_handler(event):
+    data = event.data.decode('utf-8')
+    sender = await event.get_sender()
+
+    if not await is_authorized(sender):
+        await event.answer("Anda tidak diizinkan menggunakan bot ini.", alert=True)
+        return
+
+    if data.startswith("menu_"):
+        category = data.split("_", 1)[1]
+
+        if category == "main":
+            mode_text = "PUBLIC" if mode_public else "SELF"
+            menu_text = f"⚜️ **ONLY BASE BY MAVERICK** ⚜️\nMODE: `{mode_text}`\n\nPilih kategori di bawah ini:"
+            buttons = build_main_menu()
+            await event.edit(menu_text, buttons=buttons)
+        else:
+            menu_text, buttons = build_submenu(category)
+            await event.edit(menu_text, buttons=buttons)
+
+        await event.answer()
 
 @client.on(events.NewMessage(pattern=r'^/self$', outgoing=True))
 async def set_self(event):
@@ -282,6 +400,62 @@ async def unclone_user(event):
     save_data(data)
     await m.edit(f"✅ Akses untuk **{target_user.first_name}** telah dicabut.")
 
+@client.on(events.NewMessage(pattern=r'^/clonebot$', outgoing=True))
+async def clone_bot_start(event):
+    if not await is_owner(await event.get_sender()):
+        return
+
+    sender_id = event.sender_id
+    user_interaction_state[sender_id] = "awaiting_bot_token"
+
+    await event.edit("🤖 Silakan kirimkan token bot yang ingin Anda clone.")
+
+@client.on(events.NewMessage(func=lambda e: e.sender_id in user_interaction_state and user_interaction_state[e.sender_id] == "awaiting_bot_token" and not e.message.message.startswith('/')))
+async def handle_bot_token(event):
+    sender_id = event.sender_id
+    bot_token = event.message.text.strip()
+
+    # Hapus state pengguna
+    del user_interaction_state[sender_id]
+
+    m = await event.reply("🔎 Memverifikasi token bot...")
+
+    # Verifikasi token
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/getMe"
+        response = await asyncio.to_thread(requests.get, url, timeout=10)
+
+        if response.status_code == 200:
+            bot_info = response.json().get("result", {})
+            bot_username = bot_info.get("username", "N/A")
+            bot_id = bot_info.get("id", "N/A")
+
+            # Simpan token
+            data = load_data()
+            cloned_bots = data.get("cloned_bots", [])
+
+            # Cek apakah bot sudah di-clone
+            for bot in cloned_bots:
+                if bot.get("token") == bot_token:
+                    await m.edit(f"✅ Bot `@{bot_username}` sudah ada dalam daftar.")
+                    return
+
+            cloned_bots.append({"token": bot_token, "id": bot_id, "username": bot_username})
+            data["cloned_bots"] = cloned_bots
+            save_data(data)
+
+            await m.edit(f"✅ Bot `@{bot_username}` berhasil di-clone dan tokennya disimpan.\n\n"
+                         "**Catatan:** Fitur untuk menjalankan bot yang di-clone secara otomatis belum sepenuhnya fungsional. "
+                         "Saat ini hanya token yang disimpan.")
+        else:
+            error_msg = response.json().get("description", "Unknown error")
+            await m.edit(f"❌ Token bot tidak valid.\nError: `{error_msg}`")
+
+    except requests.exceptions.RequestException as e:
+        await m.edit(f"❌ Gagal memverifikasi token: {e}")
+    except Exception as e:
+        await m.edit(f"❌ Terjadi kesalahan: {e}")
+
 @client.on(events.NewMessage(pattern=r'^/clonelist$', outgoing=True))
 async def list_clones(event):
     if not await is_owner(await event.get_sender()): return
@@ -326,6 +500,41 @@ async def cek_user(event):
         else:
             await m.edit(output_message)
 
+    except Exception as e:
+        await m.edit(f"❌ Error: {e}")
+
+@client.on(events.NewMessage(pattern=r'^/igdl (.+)$'))
+async def igdl(event):
+    sender = await event.get_sender()
+    if not mode_public and not await is_authorized(sender): return
+    url = event.pattern_match.group(1)
+    m = await event.reply("Mengunduh dari Instagram...")
+    try:
+        res = requests.get(f"https://api.siputzx.my.id/api/d/igdl?url={quote(url)}", timeout=60).json()
+        if res.get("status") and res.get("data"):
+            media_files = res.get("data", [])
+            if not media_files:
+                await m.edit("❌ Tidak ada media yang ditemukan di URL tersebut.")
+                return
+
+            await m.edit(f"✅ Ditemukan {len(media_files)} media. Mengirim...")
+
+            for i, media in enumerate(media_files):
+                media_url = media.get("url")
+                if media_url:
+                    try:
+                        await client.send_file(
+                            event.chat_id,
+                            file=media_url,
+                            caption=f"Media {i+1}/{len(media_files)}",
+                            reply_to=event.id
+                        )
+                    except Exception as e:
+                        await event.reply(f"❌ Gagal mengirim media {i+1}: {e}")
+
+            await m.delete() # Hapus pesan "Mengirim..."
+        else:
+            await m.edit(f"❌ Gagal mengunduh dari Instagram. Pesan dari API: `{res.get('data', 'Tidak ada data')}`")
     except Exception as e:
         await m.edit(f"❌ Error: {e}")
 
@@ -660,6 +869,48 @@ async def scdl(event):
                 await m.delete()
                 return
         await m.edit("❌ Tidak ditemukan")
+    except Exception as e:
+        await m.edit(f"❌ Error: {e}")
+
+@client.on(events.NewMessage(pattern=r'^/ghdl (.+)$'))
+async def ghdl(event):
+    sender = await event.get_sender()
+    if not mode_public and not await is_authorized(sender): return
+    url = event.pattern_match.group(1)
+    m = await event.reply("Mengunduh repositori GitHub...")
+    try:
+        res = requests.get(f"https://api.siputzx.my.id/api/d/github?url={quote(url)}", timeout=60).json()
+        if res.get("status") and res.get("data") and "download_url" in res.get("data"):
+            download_url = res["data"]["download_url"]
+            repo_name = res["data"].get("repo", "repository")
+
+            # Mendownload file
+            file_response = requests.get(download_url, stream=True, timeout=300) # Timeout 5 menit
+            file_response.raise_for_status()
+
+            # Menyimpan file ke buffer
+            file_buffer = io.BytesIO()
+            total_downloaded = 0
+            for chunk in file_response.iter_content(chunk_size=8192):
+                file_buffer.write(chunk)
+                total_downloaded += len(chunk)
+                # Anda bisa menambahkan progress update di sini jika mau
+
+            file_buffer.seek(0)
+            file_buffer.name = f"{repo_name}.zip"
+
+            await client.send_file(
+                event.chat_id,
+                file=file_buffer,
+                caption=f"✅ Repositori `{repo_name}` berhasil diunduh.",
+                reply_to=event.id,
+                attributes=[DocumentAttributeAudio(duration=0, title=file_buffer.name, performer=None)] # Trik untuk menampilkan nama file
+            )
+            await m.delete()
+        else:
+            await m.edit(f"❌ Gagal mengunduh repositori. Pesan dari API: `{res.get('data', 'Tidak ada data')}`")
+    except requests.exceptions.Timeout:
+        await m.edit("❌ Error: Waktu permintaan habis saat mengunduh file.")
     except Exception as e:
         await m.edit(f"❌ Error: {e}")
 
@@ -1069,38 +1320,53 @@ async def start_create_web(event):
 
     await event.reply("✅ Siap! Silakan jelaskan situs web seperti apa yang Anda inginkan di pesan berikutnya.")
 
-async def generate_website_code(prompt: str):
-    """Calls the Eden AI API to generate website code."""
-    if EDENAI_API_KEY == "YOUR_EDENAI_API_KEY":
-        return None, "Eden AI API Key belum diatur. Silakan edit file wanz.py dan atur EDENAI_API_KEY."
+async def generate_website_code_gemini(prompt: str):
+    """Calls the Google Gemini API to generate website code."""
+    if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY":
+        return None, "Gemini API Key belum diatur. Silakan edit file wanz.py dan atur GEMINI_API_KEY."
 
-    headers = {"Authorization": f"Bearer {EDENAI_API_KEY}"}
-    payload = {
-        "providers": "openai",
-        "prompt": prompt,
-        "instruction": "Generate a single, complete HTML file with CSS and JavaScript included. The file should be ready to be saved as index.html and opened in a browser.",
-        "temperature": 0.2,
-        "max_tokens": 4000,
-        "fallback_providers": "google"
+    headers = {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': GEMINI_API_KEY
     }
-    url = "https://api.edenai.run/v2/text/code_generation"
+
+    # Adding more specific instructions for HTML structure
+    full_prompt = f"Generate a single, complete HTML file based on the following description: '{prompt}'. The HTML file must include all necessary CSS and JavaScript within the same file. The structure should be `<!DOCTYPE html><html><head>...</head><body>...</body></html>`. Ensure the code is complete and ready to be saved as an `index.html` file."
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": full_prompt
+                    }
+                ]
+            }
+        ]
+    }
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash/generateContent"
 
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        response = await asyncio.to_thread(requests.post, url, json=payload, headers=headers, timeout=120)
         response.raise_for_status()
         result = response.json()
 
-        # Check for provider-specific errors
-        if result.get('openai', {}).get('status') == 'fail':
-            return None, f"Gagal menghasilkan kode: {result['openai'].get('error', {}).get('message', 'Error tidak diketahui dari OpenAI')}"
+        if 'candidates' in result and result['candidates']:
+            generated_code = result['candidates'][0]['content']['parts'][0]['text']
+            # Clean the code from markdown
+            if generated_code.strip().startswith("```html"):
+                generated_code = generated_code.strip()[7:]
+                if generated_code.endswith("```"):
+                    generated_code = generated_code[:-3]
+            return generated_code, None
+        elif 'error' in result:
+             return None, f"Gagal menghasilkan kode: {result['error'].get('message', 'Error tidak diketahui dari Google AI')}"
+        else:
+            return None, "Gagal mendapatkan kode dari API. Respon tidak valid atau kosong."
 
-        generated_code = result.get('openai', {}).get('generated_text', '')
-        if not generated_code:
-             return None, "Gagal mendapatkan kode dari API. Respon kosong."
-
-        return generated_code, None
     except requests.exceptions.RequestException as e:
-        return None, f"Error koneksi ke Eden AI: {e}"
+        return None, f"Error koneksi ke Google AI: {e}"
     except Exception as e:
         return None, f"Terjadi error: {e}"
 
@@ -1135,7 +1401,7 @@ async def handle_web_description(event):
 
     loading_task = asyncio.create_task(loading_animation(m))
 
-    code, error = await generate_website_code(description)
+    code, error = await generate_website_code_gemini(description)
 
     loading_task.cancel()
 

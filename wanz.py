@@ -8,7 +8,6 @@ from telethon.tl.types import (
     UserStatusLastWeek,
     UserStatusLastMonth,
 )
-from telethon.tl.custom import Button
 import time, psutil, requests, io, os, json, random, sys, traceback
 from PIL import Image, ImageDraw, ImageFont
 from urllib.parse import quote
@@ -139,164 +138,54 @@ async def find_first_message_date(chat_id, user_id, max_messages=20000):
         return None
     return None
 
-# --- Menu Inline ---
-
-# Definisikan struktur menu
-menu_structure = {
-    "utama": {
-        "title": "UTAMA",
-        "commands": {
-            "/ping": "status bot",
-            "/whois <@user/reply>": "info pengguna",
-            "/text <teks>": "buat stiker teks",
-            "/afk [alasan]": "set mode AFK",
-        }
-    },
-    "owner": {
-        "title": "OWNER",
-        "commands": {
-            "/clone <@user/balas>": "clone user",
-            "/unclone <@user/balas>": "hapus clone",
-            "/clonelist": "lihat daftar clone",
-            "/clonebot": "clone bot lain",
-            "/eval <code>": "eksekusi kode",
-            "/osint <user>": "cek info user",
-            "/trackmsg <on/off>": "lacak pesan grup",
-        }
-    },
-    "broadcast": {
-        "title": "BROADCAST",
-        "commands": {
-            "/cekuser": "Cek semua pengguna",
-            "/cekgroup": "Cek semua grup",
-            "/broadcast <msg> | <id>": "Broadcast pesan",
-        }
-    },
-    "search": {
-        "title": "SEARCH",
-        "commands": {
-            "/ttsearch <kata>": "",
-            "/ytsearch <kata>": "",
-            "/pinterest <kata>": "",
-            "/github <username>": "",
-            "/botnik <query>": "",
-        }
-    },
-    "downloader": {
-        "title": "DOWNLOADER",
-        "commands": {
-            "/twdl <url>": "",
-            "/fbdl <url>": "",
-            "/capcut <url>": "",
-            "/scdl <judul>": "",
-            "/ghdl <url>": "GitHub Repo",
-            "/igdl <url>": "Instagram",
-        }
-    },
-    "media": {
-        "title": "MEDIA",
-        "commands": {
-            "/topdf": "(reply foto)",
-            "/resize <WxH>": "(reply foto)",
-            "/audiotext": "(reply voice/file)",
-        }
-    },
-    "group": {
-        "title": "GROUP",
-        "commands": {
-            "/setwelcome <teks>": "",
-            "/anti <on/off>": "",
-            "/group": "",
-            "/kick <@user/reply>": "kick user",
-        }
-    },
-    "fun": {
-        "title": "FUN",
-        "commands": {
-            "/meme": "",
-            "/fancy <teks>": "",
-            "/quotes": "",
-        }
-    },
-    "util": {
-        "title": "UTIL",
-        "commands": {
-            "/cuaca <kota>": "",
-            "/cekip": "",
-            "/crypto <symbol>": "",
-            "/shortlink <url>": "",
-            "/tr <lang> <text>": "",
-            "/ud <term>": "",
-            "/createweb": "",
-            "/tempmail": "",
-        }
-    }
-}
-
-def build_main_menu():
-    buttons = []
-    row = []
-    for key, value in menu_structure.items():
-        row.append(Button.inline(value['title'], data=f"menu_{key}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    return buttons
-
-def build_submenu(category):
-    submenu = menu_structure.get(category)
-    if not submenu:
-        return "Kategori tidak ditemukan.", []
-
-    text = f"**⚜️ Menu {submenu['title']} ⚜️**\n\n"
-    for cmd, desc in submenu['commands'].items():
-        text += f"`{cmd}`"
-        if desc:
-            text += f" - {desc}"
-        text += "\n"
-
-    buttons = [[Button.inline("⬅️ Kembali", data="menu_main")]]
-    return text, buttons
 
 @client.on(events.NewMessage(pattern=r'^/(start|menu)$'))
 async def show_menu(event):
     sender = await event.get_sender()
-    if not mode_public and not await is_authorized(sender):
-        return
-
+    if not mode_public and not await is_authorized(sender): return
     mode_text = "PUBLIC" if mode_public else "SELF"
-    menu_text = f"⚜️ **ONLY BASE BY MAVERICK** ⚜️\nMODE: `{mode_text}`\n\nPilih kategori di bawah ini:"
-    buttons = build_main_menu()
-
+    menu = (
+f"⚜️ONLY BASE BY MAVERICK⚜️\nMODE: {mode_text}\n\n"
+"╔═══════════════ UTAMA ═══════════════╗\n"
+"/ping - status bot\n"
+"/whois <@user/reply> - info pengguna\n"
+"/text <teks> - buat stiker teks\n"
+"/afk [alasan] - set mode AFK\n"
+"╠═══════════════ OWNER ═══════════════╣\n"
+"/clone <@user/balas> - clone user\n"
+"/unclone <@user/balas> - hapus clone\n"
+"/clonelist - lihat daftar clone\n"
+"/clonebot - clone bot lain\n"
+"/eval <code> - eksekusi kode python\n"
+"/osint <user> - cek info user\n"
+"/trackmsg <on/off> - lacak pesan grup\n"
+"╠══════════════ BROADCAST ═════════════╣\n"
+"/cekuser - Cek semua pengguna\n"
+"/cekgroup - Cek semua grup\n"
+"/broadcast <msg> | <id> - Broadcast pesan\n"
+"╠══════════════ SEARCH ════════════════╣\n"
+"/ttsearch <kata>\n/ytsearch <kata>\n/pinterest <kata>\n/github <username>\n/botnik <query>\n"
+"╠══════════════ DOWNLOADER ════════════╣\n"
+"/twdl <url>\n/fbdl <url>\n/capcut <url>\n/scdl <judul>\n/ghdl <url>\n/igdl <url>\n"
+"╠══════════════ MEDIA ═════════════════╣\n"
+"/topdf (reply foto)\n/resize <WxH> (reply foto)\n/audiotext (reply voice/file)\n"
+"╠══════════════ GROUP ═════════════════╣\n"
+"/setwelcome <teks>\n/anti <on/off>\n/group\n"
+"╠══════════════ FUN ═════════════════╣\n"
+"/meme\n/fancy <teks>\n/quotes\n"
+"╠══════════════ UTIL ══════════════════╣\n"
+"/cuaca <kota>\n/cekip\n/crypto <symbol>\n/shortlink <url>\n/tr <lang> <text>\n/ud <term>\n/createweb\n/tempmail\n"
+"╚════════════════════════════════════╝"
+    )
     if await is_owner(sender) or event.outgoing:
-        await event.edit(menu_text, buttons=buttons)
+        # Trying to edit a message that doesn't exist will fail
+        # So we will just send a new one in case of error
+        try:
+            await event.edit(menu)
+        except:
+            await event.respond(menu)
     else:
-        await event.reply(menu_text, buttons=buttons)
-
-@client.on(events.CallbackQuery)
-async def menu_callback_handler(event):
-    data = event.data.decode('utf-8')
-    sender = await event.get_sender()
-
-    if not await is_authorized(sender):
-        await event.answer("Anda tidak diizinkan menggunakan bot ini.", alert=True)
-        return
-
-    if data.startswith("menu_"):
-        category = data.split("_", 1)[1]
-
-        if category == "main":
-            mode_text = "PUBLIC" if mode_public else "SELF"
-            menu_text = f"⚜️ **ONLY BASE BY MAVERICK** ⚜️\nMODE: `{mode_text}`\n\nPilih kategori di bawah ini:"
-            buttons = build_main_menu()
-            await event.edit(menu_text, buttons=buttons)
-        else:
-            menu_text, buttons = build_submenu(category)
-            await event.edit(menu_text, buttons=buttons)
-
-        await event.answer()
+        await event.reply(menu)
 
 @client.on(events.NewMessage(pattern=r'^/self$', outgoing=True))
 async def set_self(event):
