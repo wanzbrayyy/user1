@@ -37,7 +37,7 @@ user_interaction_state = {}
 
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
-        json.dump({"welcome": {}, "anti_link": {}, "shortlinks": {}, "afk": {"is_afk": False, "message": "", "since": 0}, "cloned_users": [], "message_tracker_enabled": False, "cloned_bots": []}, f)
+        json.dump({"welcome": {}, "anti_link": {}, "shortlinks": {}, "afk": {"is_afk": False, "message": "", "since": 0}, "cloned_users": [], "message_tracker_enabled": False, "cloned_bots": [], "menfess_log": {}}, f)
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
@@ -964,6 +964,101 @@ async def quotes(event):
         await event.reply(f"“{res.get('content')}” — {res.get('author')}")
     except Exception as e:
         await event.reply(f"❌ Error: {e}")
+
+@client.on(events.NewMessage(pattern=r'^/(menfess|confess)\s+([^|]+)\|([^|]+)\|(@\w+)$'))
+async def menfess_handler(event):
+    sender = await event.get_sender()
+    if not mode_public and not await is_authorized(sender): return
+
+    try:
+        command, message, from_name, to_username = event.pattern_match.groups()
+        message = message.strip()
+        from_name = from_name.strip()
+        to_username = to_username.strip()
+
+        m = await event.reply(f"🔄 Mengirim pesan {command} ke {to_username}...")
+
+        # Dapatkan target user
+        try:
+            target_user = await client.get_entity(to_username)
+        except (ValueError, TypeError):
+            await m.edit(f"❌ Username `{to_username}` tidak valid atau tidak ditemukan.")
+            return
+
+        # Format pesan
+        formatted_message = (
+            f"╭─❏「 **PESAN {command.upper()} BARU** 」\n"
+            "│\n"
+            f"├- 💌 **Pesan:** {message}\n"
+            f"├- 🤫 **Dari:** {from_name}\n"
+            "│\n"
+            "╰─❏\n\n"
+            f"_(Pesan ini dikirim melalui userbot. Balas pesan ini dengan `/balas <pesan>` untuk membalas)_"
+        )
+
+        # Kirim pesan ke target
+        sent_message = await client.send_message(target_user.id, formatted_message)
+
+        # Simpan log untuk fitur balas
+        data = load_data()
+        menfess_log = data.get("menfess_log", {})
+        # Kunci log adalah ID pesan di chat target, valuenya adalah ID pengirim asli
+        menfess_log[str(sent_message.id)] = {
+            "original_sender_id": sender.id,
+            "original_chat_id": event.chat_id,
+            "target_user_id": target_user.id
+        }
+        data["menfess_log"] = menfess_log
+        save_data(data)
+
+        await m.edit(f"✅ Pesan {command} berhasil dikirim ke {to_username}.")
+
+    except Exception as e:
+        await event.reply(f"❌ Terjadi kesalahan: {e}\n\n**Format yang benar:**\n`/{event.pattern_match.group(1)} pesan|nama samaran|@username`")
+
+@client.on(events.NewMessage(pattern=r'^/balas\s+(.+)'))
+async def balas_handler(event):
+    if not event.is_reply:
+        await event.reply("❗️ Perintah ini harus digunakan dengan membalas pesan menfess/confess.")
+        return
+
+    sender = await event.get_sender()
+    if not mode_public and not await is_authorized(sender): return
+
+    try:
+        reply_message_text = event.pattern_match.group(1).strip()
+        reply_to_msg = await event.get_reply_message()
+        reply_to_id = str(reply_to_msg.id)
+
+        data = load_data()
+        menfess_log = data.get("menfess_log", {})
+
+        if reply_to_id not in menfess_log:
+            await event.reply("❗️ Pesan yang Anda balas bukan pesan menfess/confess yang bisa dibalas melalui bot ini.")
+            return
+
+        m = await event.reply("🔄 Mengirim balasan...")
+
+        original_sender_id = menfess_log[reply_to_id]["original_sender_id"]
+
+        # Format balasan
+        formatted_reply = (
+            f"╭─❏「 **BALASAN UNTUKMU** 」\n"
+            "│\n"
+            f"├- 💬 **Pesan:** {reply_message_text}\n"
+            "│\n"
+            f"╰─❏\n\n"
+            f"_(Ini adalah balasan untuk pesan menfess/confess yang Anda kirim sebelumnya.)_"
+        )
+
+        try:
+            await client.send_message(original_sender_id, formatted_reply)
+            await m.edit("✅ Balasan berhasil dikirim.")
+        except Exception as e:
+            await m.edit(f"❌ Gagal mengirim balasan ke pengirim asli. Mungkin saya diblokir. Error: {e}")
+
+    except Exception as e:
+        await event.reply(f"❌ Terjadi kesalahan saat memproses balasan: {e}")
 
 @client.on(events.NewMessage(pattern=r'^/cekip$'))
 async def cekip(event):
